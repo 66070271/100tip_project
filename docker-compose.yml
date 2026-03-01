@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # 1. กล่องจดหมายตรงกลาง (RabbitMQ)
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: 100tip_rabbitmq
+    ports:
+      - "5672:5672"   # Port สำหรับให้ Service คุยกัน
+      - "15672:15672" # Port สำหรับเปิดหน้าเว็บดูคิว
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. ระบบตั้งกระทู้ของเรา
+  discussion-service:
+    build: ./discussion-service
+    container_name: 100tip_discussion
+    ports:
+      - "8080:8080" # ให้หน้าบ้าน (HTML) เรียก API ผ่าน Port นี้
+    depends_on:
+      rabbitmq:
+        condition: service_healthy # รอให้ RabbitMQ พร้อมใช้งานจริงๆ ก่อนถึงจะเปิด Service นี้

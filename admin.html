@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moderation - 100TIP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="index.html" class="text-xl font-bold tracking-tighter text-black">100TIP.</a>
+            <div class="flex items-center space-x-6 text-sm font-medium">
+                <a href="index.html" class="text-gray-500 hover:text-black transition-colors">Feed</a>
+                <a href="admin.html" class="text-black border-b-2 border-black pb-1">Admin</a>
+                <a href="create.html" class="bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors">Write</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-6 py-12">
+        <div class="flex justify-between items-end mb-8 border-b border-gray-200 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-black tracking-tight">Moderation Queue</h1>
+                <p class="text-sm text-gray-500 mt-1">Review pending stories before publishing.</p>
+            </div>
+            <button onclick="fetchPosts()" class="text-sm text-blue-600 font-medium hover:underline">🔄 Refresh Queue</button>
+        </div>
+
+        <div id="admin-container" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <p class="text-gray-400 text-sm">Loading...</p>
+        </div>
+    </main>
+
+    <script>
+        const API = "http://localhost:8080/api/posts";
+
+        window.onload = fetchPosts;
+
+        async function fetchPosts() {
+            try {
+                const res = await fetch(API + "?t=" + new Date().getTime());
+                const posts = await res.json();
+                
+                // หาเฉพาะอันที่ pending
+                const pendingPosts = posts.filter(p => p.status === 'pending').sort((a, b) => b.ID - a.ID);
+                const container = document.getElementById('admin-container');
+
+                if (pendingPosts.length === 0) {
+                    container.innerHTML = `
+                        <div class="col-span-full py-16 text-center text-gray-400 border border-dashed border-gray-300 rounded-xl bg-white">
+                            Queue is empty. All caught up! ✨
+                        </div>`;
+                    return;
+                }
+
+                container.innerHTML = pendingPosts.map(p => `
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div>
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">Pending</span>
+                                <span class="text-xs text-gray-400">Post #${p.ID}</span>
+                            </div>
+                            <h3 class="font-bold text-lg leading-tight mb-2">${p.title}</h3>
+                            <p class="text-sm text-gray-600 line-clamp-3 mb-6">${p.content}</p>
+                        </div>
+                        
+                        <div class="flex space-x-3 mt-auto border-t border-gray-100 pt-4">
+                            <button onclick="changeStatus(${p.ID}, 'approved')" class="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">Approve</button>
+                            <button onclick="changeStatus(${p.ID}, 'rejected')" class="flex-1 bg-white text-red-600 border border-red-200 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">Reject</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                document.getElementById('admin-container').innerHTML = `<p class="text-red-500 col-span-full">Connection error.</p>`;
+            }
+        }
+
+        async function changeStatus(id, newStatus) {
+            const res = await fetch(`${API}/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            if (res.ok) fetchPosts();
+        }
+    </script>
+</body>
+</html>

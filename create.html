@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Write - 100TIP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+    <nav class="max-w-4xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <a href="index.html" class="text-xl font-bold tracking-tighter text-black hover:opacity-70">100TIP.</a>
+            <span class="text-gray-300">|</span>
+            <span class="text-sm text-gray-500 font-medium">Drafting...</span>
+        </div>
+        <button onclick="publishPost()" class="bg-green-600 text-white px-5 py-2 rounded-full text-sm font-medium hover:bg-green-700 transition-colors shadow-sm">
+            Publish
+        </button>
+    </nav>
+
+    <main class="max-w-2xl mx-auto px-6 py-10">
+        <input type="text" id="title" placeholder="Title" class="w-full text-4xl md:text-5xl font-bold border-none focus:outline-none placeholder-gray-300 mb-6 bg-transparent">
+        <textarea id="content" rows="15" placeholder="Tell your story..." class="w-full text-lg md:text-xl text-gray-700 font-light border-none focus:outline-none placeholder-gray-300 resize-none bg-transparent leading-relaxed"></textarea>
+    </main>
+
+    <script>
+        const API = "http://localhost:8080/api/posts";
+
+        async function publishPost() {
+            const title = document.getElementById('title').value;
+            const content = document.getElementById('content').value;
+            
+            if (!title || !content) return alert("Please write a title and your story.");
+
+            try {
+                const res = await fetch(API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, content })
+                });
+
+                if (res.ok) {
+                    alert("Story submitted! Waiting for moderation.");
+                    window.location.href = "index.html";
+                }
+            } catch (err) {
+                alert("Connection error.");
+            }
+        }
+    </script>
+</body>
+</html>

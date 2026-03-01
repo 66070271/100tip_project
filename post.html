@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story - 100TIP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
+            <a href="index.html" class="text-xl font-bold tracking-tighter text-black">100TIP.</a>
+            <div class="flex items-center space-x-6 text-sm font-medium">
+                <a href="index.html" class="text-gray-500 hover:text-black transition-colors">Feed</a>
+                <a href="admin.html" class="text-gray-500 hover:text-black transition-colors">Admin</a>
+                <a href="create.html" class="bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors">Write</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-2xl mx-auto px-6 py-16" id="post-container">
+        <p class="text-gray-400 animate-pulse">Loading story...</p>
+    </main>
+
+    <script>
+        const API = "http://localhost:8080/api/posts";
+        const urlParams = new URLSearchParams(window.location.search);
+        const postId = urlParams.get('id');
+        let currentPost = null;
+
+        window.onload = async () => {
+            if (!postId) return window.location.href = 'index.html';
+
+            try {
+                // 📍 ยิง API ดึงข้อมูลแค่ 1 กระทู้ตาม ID
+                const res = await fetch(`${API}/${postId}?t=` + new Date().getTime());
+                if (res.ok) {
+                    currentPost = await res.json();
+                    renderPost();
+                } else {
+                    document.getElementById('post-container').innerHTML = '<p class="text-center text-gray-500">Story not found or deleted.</p>';
+                }
+            } catch (err) {
+                document.getElementById('post-container').innerHTML = '<p class="text-red-500">Failed to load the story.</p>';
+            }
+        };
+
+        function renderPost() {
+            const date = new Date(currentPost.CreatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const container = document.getElementById('post-container');
+            
+            container.innerHTML = `
+                <div class="mb-10">
+                    <h1 class="text-4xl md:text-5xl font-bold text-gray-900 tracking-tight mb-6 leading-tight">${currentPost.title}</h1>
+                    <div class="flex justify-between items-end border-b border-gray-200 pb-6">
+                        <div class="text-sm text-gray-500">
+                            Written by <span class="font-semibold text-gray-900">${currentPost.user_id}</span><br>
+                            ${date}
+                        </div>
+                        <div class="space-x-4 text-sm font-medium">
+                            <button onclick="enableEditMode()" class="text-blue-600 hover:underline">Edit</button>
+                            <button onclick="deletePost()" class="text-red-600 hover:underline">Delete</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-gray-800 text-lg leading-relaxed font-light whitespace-pre-line">
+                    ${currentPost.content}
+                </div>
+            `;
+        }
+
+        function enableEditMode() {
+            const container = document.getElementById('post-container');
+            container.innerHTML = `
+                <div class="mb-8">
+                    <input type="text" id="edit-title" value="${currentPost.title}" class="w-full text-4xl font-bold text-gray-900 border-b border-gray-300 pb-2 focus:outline-none focus:border-black bg-transparent">
+                </div>
+                <div class="mb-8">
+                    <textarea id="edit-content" rows="12" class="w-full text-lg text-gray-800 leading-relaxed font-light border border-gray-300 rounded-lg p-4 focus:outline-none focus:border-black resize-y">${currentPost.content}</textarea>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button onclick="renderPost()" class="px-6 py-2 text-gray-500 hover:text-black font-medium transition-colors">Cancel</button>
+                    <button onclick="saveEdit()" class="px-6 py-2 bg-black text-white rounded-full hover:bg-gray-800 font-medium transition-colors">Save Changes</button>
+                </div>
+            `;
+        }
+
+        async function saveEdit() {
+            const title = document.getElementById('edit-title').value;
+            const content = document.getElementById('edit-content').value;
+
+            if (!title || !content) return alert("Please fill in all fields.");
+
+            const res = await fetch(`${API}/${postId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, content })
+            });
+
+            if (res.ok) {
+                currentPost.title = title;
+                currentPost.content = content;
+                renderPost();
+            } else {
+                alert("Failed to save changes.");
+            }
+        }
+
+        async function deletePost() {
+            if (confirm("Are you sure? This action cannot be undone.")) {
+                await fetch(`${API}/${postId}`, { method: 'DELETE' });
+                window.location.href = 'index.html';
+            }
+        }
+    </script>
+</body>
+</html>
