@@ -14,6 +14,6 @@ COPY . .
 RUN go build -o main .
 
 # Expose port 8081 (This is the port we set in your Auth main.go)
-EXPOSE 8081
+EXPOSE 8082
 
 CMD ["./main"]

@@ -50,7 +50,7 @@ func main() {
 	r.POST("/login", login)
 
 	// Run on port 8081 (Assuming Discussion service runs on 8080)
-	r.Run(":8081") 
+	r.Run(":8082") 
 }
 
 // --- Handler Functions ---

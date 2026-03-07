@@ -29,4 +29,13 @@ services:
     build: ./authentication-service
     container_name: 100tip_auth
     ports:
-      - "8081:8081" # Exposing port 8081 specifically for Auth
+      - "8082:8082" # Exposing port 8081 specifically for Auth
+  # 4. Moderation Service (พอร์ต 8081 สำหรับ Admin)
+  moderation-service:
+    build: ./moderation-service
+    container_name: 100tip_moderation
+    ports:
+      - "8081:8081"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy # รอให้คิวพร้อมก่อนค่อยรัน

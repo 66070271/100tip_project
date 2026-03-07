@@ -36,7 +36,7 @@
     </main>
 
     <script>
-        const API = "http://localhost:8080/api/posts";
+        const API = "http://localhost:8081/api/tasks";
 
         window.onload = fetchPosts;
 
@@ -62,15 +62,15 @@
                         <div>
                             <div class="flex justify-between items-center mb-4">
                                 <span class="bg-yellow-100 text-yellow-800 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded">Pending</span>
-                                <span class="text-xs text-gray-400">Post #${p.ID}</span>
+                                <span class="text-xs text-gray-400">Post #${p.id}</span>
                             </div>
                             <h3 class="font-bold text-lg leading-tight mb-2">${p.title}</h3>
                             <p class="text-sm text-gray-600 line-clamp-3 mb-6">${p.content}</p>
                         </div>
                         
                         <div class="flex space-x-3 mt-auto border-t border-gray-100 pt-4">
-                            <button onclick="changeStatus(${p.ID}, 'approved')" class="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">Approve</button>
-                            <button onclick="changeStatus(${p.ID}, 'rejected')" class="flex-1 bg-white text-red-600 border border-red-200 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">Reject</button>
+                            <button onclick="changeStatus(${p.id}, 'approved')" class="flex-1 bg-black text-white py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">Approve</button>
+                            <button onclick="changeStatus(${p.id}, 'rejected')" class="flex-1 bg-white text-red-600 border border-red-200 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors">Reject</button>
                         </div>
                     </div>
                 `).join('');
@@ -87,6 +87,7 @@
             });
             if (res.ok) fetchPosts();
         }
+        
     </script>
 </body>
 </html>

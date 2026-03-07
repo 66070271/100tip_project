@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-// ==========================================
-// 1. Database Model
-// ==========================================
 type Post struct {
 	gorm.Model
 	Title   string `json:"title" binding:"required"`
@@ -27,7 +26,6 @@ var db *gorm.DB
 
 func main() {
 	var err error
-	// เชื่อมต่อ SQLite Database
 	db, err = gorm.Open(sqlite.Open("discussion.db"), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect database")
@@ -35,14 +33,13 @@ func main() {
 	db.AutoMigrate(&Post{})
 	fmt.Println("✅ Database connected and migrated!")
 
+	// 📍 สั่งให้ Discussion ไปตั้งใจฟังประกาศจาก Moderation (Background)
+	go consumeStatusUpdates("discussion_update_queue")
+
 	r := gin.Default()
 
-	// ==========================================
-	// 2. CORS Middleware (สำคัญมากสำหรับหน้าเว็บ)
-	// ==========================================
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		// เปิดให้รองรับทุก Method รวมทั้ง PATCH สำหรับอัปเดตสถานะ
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if c.Request.Method == "OPTIONS" {
@@ -52,41 +49,55 @@ func main() {
 		c.Next()
 	})
 
-	// ==========================================
-	// 3. API Routes (RESTful Standard)
-	// ==========================================
-	r.POST("/api/posts", createPost)             // สร้างกระทู้ใหม่
-	r.GET("/api/posts", getPosts)                // ดึงกระทู้ทั้งหมด (Feed)
-	r.GET("/api/posts/:id", getPostByID)         // ดึงข้อมูลกระทู้เดียว (หน้าอ่านรายละเอียด)
-	r.PUT("/api/posts/:id", updatePost)          // แก้ไขกระทู้
-	r.DELETE("/api/posts/:id", deletePost)       // ลบกระทู้
-	r.PATCH("/api/posts/:id/status", updatePostStatus) // แอดมินอัปเดตสถานะ
+	r.POST("/api/posts", createPost)
+	r.GET("/api/posts", getPosts)
+	r.GET("/api/posts/:id", getPostByID)
+	r.PUT("/api/posts/:id", updatePost)
+	r.DELETE("/api/posts/:id", deletePost)
 
 	fmt.Println("🚀 Discussion Service is running on port 8080...")
 	r.Run(":8080")
 }
 
-// ==========================================
-// Controllers (ฟังก์ชันจัดการ API)
-// ==========================================
-
-// สร้างกระทู้ใหม่
 func createPost(c *gin.Context) {
+	// 📍 1. ตรวจสอบบัตรผ่าน (JWT) จาก Header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "ต้องล็อกอินก่อนสร้างกระทู้"})
+		return
+	}
+
+	// รูปแบบคือ "Bearer <token>" เราต้องตัดคำว่า Bearer ออก
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	
+	// 📍 2. ถอดรหัสบัตรผ่าน (ต้องใช้ Secret Key เดียวกับ Auth Service)
+	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte("my_super_secret_key_100tip"), nil 
+	})
+
+	if token == nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Session หมดอายุหรือบัตรผ่านไม่ถูกต้อง"})
+		return
+	}
+
+	// 📍 3. ดึงชื่อ Username ออกมาจากบัตรผ่าน
+	claims, _ := token.Claims.(jwt.MapClaims)
+	username := claims["username"].(string)
+
 	var newPost Post
 	if err := c.ShouldBindJSON(&newPost); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ครบถ้วน"})
 		return
 	}
-
-	newPost.Status = "pending"  // เริ่มต้นเป็นรอตรวจสอบ
-	newPost.UserID = "user_123" // (Mock) ในอนาคตดึงจาก Auth Token
+	
+	newPost.Status = "pending"
+	newPost.UserID = username // 👈 เปลี่ยนจาก "user_123" เป็นชื่อที่ดึงมาได้จาก Token จริงๆ!
 
 	if err := db.Create(&newPost).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลได้"})
 		return
 	}
 
-	// 📍 ส่ง Event เข้า RabbitMQ เพื่อให้ Moderation ไปตรวจ
 	publishToRabbitMQ("moderation_queue", newPost)
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -95,14 +106,12 @@ func createPost(c *gin.Context) {
 	})
 }
 
-// ดึงกระทู้ทั้งหมด
 func getPosts(c *gin.Context) {
 	var posts []Post
 	db.Find(&posts)
 	c.JSON(http.StatusOK, posts)
 }
 
-// ดึงเฉพาะกระทู้เดียว (จาก ID)
 func getPostByID(c *gin.Context) {
 	id := c.Param("id")
 	var post Post
@@ -113,7 +122,6 @@ func getPostByID(c *gin.Context) {
 	c.JSON(http.StatusOK, post)
 }
 
-// แก้ไขกระทู้
 func updatePost(c *gin.Context) {
 	id := c.Param("id")
 	var post Post
@@ -121,58 +129,31 @@ func updatePost(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกระทู้"})
 		return
 	}
-
 	var updateData Post
 	if err := c.ShouldBindJSON(&updateData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
 		return
 	}
-
 	post.Title = updateData.Title
 	post.Content = updateData.Content
 	db.Save(&post)
 	c.JSON(http.StatusOK, post)
 }
 
-// ลบกระทู้
 func deletePost(c *gin.Context) {
 	id := c.Param("id")
 	db.Delete(&Post{}, id)
 	c.JSON(http.StatusOK, gin.H{"message": "ลบกระทู้สำเร็จ"})
 }
 
-// แอดมินแก้ไขสถานะ
-func updatePostStatus(c *gin.Context) {
-	id := c.Param("id")
-	var post Post
-	if err := db.First(&post, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกระทู้"})
-		return
-	}
-
-	var statusUpdate struct {
-		Status string `json:"status"`
-	}
-	if err := c.ShouldBindJSON(&statusUpdate); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ข้อมูลไม่ถูกต้อง"})
-		return
-	}
-
-	post.Status = statusUpdate.Status
-	db.Save(&post)
-	c.JSON(http.StatusOK, gin.H{"message": "อัปเดตสถานะเป็น " + post.Status})
-}
-
 // ==========================================
-// RabbitMQ Publisher
+// RabbitMQ Functions
 // ==========================================
-
 func publishToRabbitMQ(queueName string, post Post) {
-	// ใช้ host "rabbitmq" สำหรับรันใน Docker
 	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
 	if err != nil {
 		log.Printf("⚠️ RabbitMQ Connection Error: %v", err)
-		return // ระบบยังทำงานต่อได้ แม้ RabbitMQ จะล่ม (Fault Tolerance)
+		return
 	}
 	defer conn.Close()
 
@@ -192,5 +173,42 @@ func publishToRabbitMQ(queueName string, post Post) {
 	})
 	if err == nil {
 		log.Printf("🐰 [x] Sent Post ID %d to RabbitMQ (Queue: %s)", post.ID, queueName)
+	}
+}
+
+func consumeStatusUpdates(queueName string) {
+	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
+	if err != nil {
+		log.Println("⚠️ Consumer Failed to connect to RabbitMQ")
+		return
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		return
+	}
+	defer ch.Close()
+
+	q, _ := ch.QueueDeclare(queueName, true, false, false, false, nil)
+	msgs, _ := ch.Consume(q.Name, "", true, false, false, false, nil)
+
+	log.Println("👂 Discussion Service is listening for status updates...")
+
+	for d := range msgs {
+		var updatePayload struct {
+			PostID uint   `json:"post_id"`
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(d.Body, &updatePayload); err != nil {
+			continue
+		}
+
+		var post Post
+		if err := db.First(&post, updatePayload.PostID).Error; err == nil {
+			post.Status = updatePayload.Status
+			db.Save(&post)
+			log.Printf("✅ Eventual Consistency Achieved! Post %d is now %s", post.ID, post.Status)
+		}
 	}
 }
