@@ -8,10 +8,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hashicorp/consul/api"
 	"github.com/golang-jwt/jwt/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 )
 
 type Post struct {
@@ -38,6 +40,9 @@ func main() {
 
 	r := gin.Default()
 
+	p := ginprometheus.NewPrometheus("gin")
+    p.Use(r)
+
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
@@ -54,6 +59,12 @@ func main() {
 	r.GET("/api/posts/:id", getPostByID)
 	r.PUT("/api/posts/:id", updatePost)
 	r.DELETE("/api/posts/:id", deletePost)
+	
+	r.GET("/health", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{"status": "UP", "service": "discussion-service"})
+    })
+
+	registerWithConsul("discussion-service", 8080)
 
 	fmt.Println("🚀 Discussion Service is running on port 8080...")
 	r.Run(":8080")
@@ -211,4 +222,34 @@ func consumeStatusUpdates(queueName string) {
 			log.Printf("✅ Eventual Consistency Achieved! Post %d is now %s", post.ID, post.Status)
 		}
 	}
+	
+}
+func registerWithConsul(serviceName string, port int) {
+    config := api.DefaultConfig()
+    config.Address = "consul:8500" // ชี้ไปที่ Container ของ Consul ใน Docker
+
+    client, err := api.NewClient(config)
+    if err != nil {
+        log.Println("⚠️ ไม่สามารถเชื่อมต่อ Consul ได้:", err)
+        return
+    }
+
+    registration := &api.AgentServiceRegistration{
+        ID:      serviceName + "-1", // ตั้ง ID ให้ไม่ซ้ำกันเผื่อรันหลายตู้
+        Name:    serviceName,
+        Port:    port,
+        Address: serviceName, // ใช้ชื่อ Container Name เป็น Address ให้ Docker หาเจอ
+        Check: &api.AgentServiceCheck{
+            HTTP:     fmt.Sprintf("http://%s:%d/health", serviceName, port),
+            Interval: "10s", // ตรวจสุขภาพทุกๆ 10 วินาที
+            Timeout:  "5s",
+        },
+    }
+
+    err = client.Agent().ServiceRegister(registration)
+    if err != nil {
+        log.Printf("⚠️ รายงานตัวกับ Consul ไม่สำเร็จ: %v\n", err)
+    } else {
+        log.Printf("✅ %s รายงานตัวกับ Consul สำเร็จแล้ว!\n", serviceName)
+    }
 }

@@ -1,7 +1,20 @@
 global:
-  scrape_interval: 15s 
+  scrape_interval: 15s # เดินไปดูดข้อมูลทุกๆ 15 วินาที
 
 scrape_configs:
+  # 1. ให้มันดูดข้อมูลสถานะของตัวมันเอง (อันนี้ปล่อยเป็น static ไว้ได้ครับ)
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090'] 
+
+  # 📍 2. ให้ Prometheus ไปถาม Consul ว่ามี Service อะไรให้ดูดบ้าง!
+  - job_name: 'consul_discovery'
+    consul_sd_configs:
+      - server: 'consul:8500' # ชี้เป้าไปที่ตู้ Consul 
+    
+    # 📍 (Optional) กรองให้ดูดข้อมูลเฉพาะ Service ที่มีคำว่า "service" ต่อท้าย
+    # เพื่อป้องกันไม่ให้มันไปพยายามดูดข้อมูลจากตู้ DB หรือ RabbitMQ
+    relabel_configs:
+      - source_labels: [__meta_consul_service]
+        regex: '.*-service.*'
+        action: keep

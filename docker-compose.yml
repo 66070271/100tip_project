@@ -1,38 +1,21 @@
 version: '3.8'
 
 services:
-  # 1. กล่องจดหมายตรงกลาง (RabbitMQ)
+  # ==========================================
+  # 1. INFRASTRUCTURE & MONITORING
+  # ==========================================
   rabbitmq:
     image: rabbitmq:3-management
     container_name: 100tip_rabbitmq
     ports:
-      - "5672:5672"   # Port สำหรับให้ Service คุยกัน
-      - "15672:15672" # Port สำหรับเปิดหน้าเว็บดูคิว
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # 2. ระบบตั้งกระทู้ของเรา
-  discussion-service:
-    build: ./discussion-service
-    container_name: 100tip_discussion
-    ports:
-      - "8080:8080" # ให้หน้าบ้าน (HTML) เรียก API ผ่าน Port นี้
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-  # 3. ระบบยืนยันตัวตน (The new Auth Service)
-  authentication-service:
-    build: ./authentication-service
-    container_name: 100tip_auth
-    ports:
-      - "8081:8081" # Exposing port 8081 specifically for Auth
-
-
-      # --- Service Discovery ---
   consul:
     image: hashicorp/consul
     container_name: 100tip_registry
@@ -40,20 +23,54 @@ services:
       - "8500:8500"
     command: agent -dev -client=0.0.0.0
 
-  # --- Data Collector ---
   prometheus:
     image: prom/prometheus
     container_name: 100tip_prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml 
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
 
-  # --- Pretty Dashboard ---
   grafana:
     image: grafana/grafana
-    container_name: 100tip_grafana
     ports:
       - "3000:3000"
+    volumes: # 📍 เพิ่ม 2 บรรทัดนี้เข้าไปครับ
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+
+  # ==========================================
+  # 2. API GATEWAY & FRONTEND
+  # ==========================================
+  api-gateway:
+    build: ./api-gateway
+    container_name: 100tip_gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
     depends_on:
-      - prometheus
+      - discussion-service
+      - moderation-service
+      - authentication-service
+
+  # ==========================================
+  # 3. MICROSERVICES (หลังบ้าน)
+  # ==========================================
+  discussion-service:
+    build: ./discussion-service
+    container_name: 100tip_discussion
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  moderation-service:
+    build: ./moderation-service
+    container_name: 100tip_moderation
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  authentication-service:
+    build: ./authentication-service
+    container_name: 100tip_auth

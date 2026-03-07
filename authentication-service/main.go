@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt" // 👈 เพิ่มบรรทัดนี้
+    "log" // 👈 เพิ่มบรรทัดนี้
 	"net/http"
 	"time"
 
@@ -9,6 +11,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"github.com/hashicorp/consul/api"
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 )
 
 // 1. Setup the Database and Secret Key
@@ -32,7 +36,8 @@ func main() {
 
 	// 2. Setup the Web Server
 	r := gin.Default()
-
+	p := ginprometheus.NewPrometheus("gin")
+    p.Use(r)
 	// CORS Middleware to let your HTML files talk to this API
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -46,8 +51,16 @@ func main() {
 	})
 
 	// 3. Our Two API Endpoints
-	r.POST("/register", register)
-	r.POST("/login", login)
+	r.POST("/api/auth/register", register) // เปลี่ยนจาก /register
+	r.POST("/api/auth/login", login)       // เปลี่ยนจาก /login
+	
+
+	r.GET("/health", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{"status": "UP", "service": "authentication-service"})
+    })
+
+    // 📍 2. รายงานตัวชื่อ authentication-service พอร์ต 8082
+    registerWithConsul("authentication-service", 8082)
 
 	// Run on port 8081 (Assuming Discussion service runs on 8080)
 	r.Run(":8082") 
@@ -111,4 +124,36 @@ func login(c *gin.Context) {
 	tokenString, _ := token.SignedString(jwtSecret)
 
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
+}
+// ==========================================
+// Consul Registration Function
+// ==========================================
+func registerWithConsul(serviceName string, port int) {
+    config := api.DefaultConfig()
+    config.Address = "consul:8500" // ชี้ไปที่ Container ของ Consul
+
+    client, err := api.NewClient(config)
+    if err != nil {
+        log.Println("⚠️ ไม่สามารถเชื่อมต่อ Consul ได้:", err)
+        return
+    }
+
+    registration := &api.AgentServiceRegistration{
+        ID:      serviceName + "-1",
+        Name:    serviceName,
+        Port:    port,
+        Address: serviceName, // ให้ Docker หาเจอผ่านชื่อ Container
+        Check: &api.AgentServiceCheck{
+            HTTP:     fmt.Sprintf("http://%s:%d/health", serviceName, port),
+            Interval: "10s",
+            Timeout:  "5s",
+        },
+    }
+
+    err = client.Agent().ServiceRegister(registration)
+    if err != nil {
+        log.Printf("⚠️ รายงานตัวกับ Consul ไม่สำเร็จ: %v\n", err)
+    } else {
+        log.Printf("✅ %s รายงานตัวกับ Consul สำเร็จแล้ว!\n", serviceName)
+    }
 }

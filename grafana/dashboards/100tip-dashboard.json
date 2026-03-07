@@ -1,0 +1,50 @@
+{
+  "title": "🏆 100TIP Enterprise Monitoring",
+  "tags": ["100tip", "go", "microservices"],
+  "timezone": "browser",
+  "refresh": "5s",
+  "panels": [
+    {
+      "title": "🌐 Global Traffic Overview",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Total Requests",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 1 },
+      "targets": [{ "expr": "sum(rate(gin_requests_total[1m]))", "legendFormat": "Req/s" }],
+      "options": { "colorMode": "background", "graphMode": "area" }
+    },
+    {
+      "title": "Auth Success Rate (%)",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 1 },
+      "targets": [{ "expr": "sum(rate(gin_requests_total{url=\"/api/auth/login\", code=\"200\"}[1m])) / sum(rate(gin_requests_total{url=\"/api/auth/login\"}[1m])) * 100" }],
+      "fieldConfig": { "defaults": { "min": 0, "max": 100, "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 80 }] } } }
+    },
+    {
+      "title": "Discussion: Post Creation Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "targets": [{ "expr": "rate(gin_requests_total{instance=~\"discussion-service.*\", method=\"POST\", url=\"/api/posts\"}[1m])", "legendFormat": "New Posts/min" }]
+    },
+    {
+      "title": "Moderation: Queue Health (Pending Status)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "targets": [{ "expr": "sum(gin_requests_total{instance=~\"moderation-service.*\", code=\"200\"})", "legendFormat": "Posts Processed" }]
+    },
+    {
+      "title": "💻 System Resources (Go Runtime)",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
+    },
+    {
+      "title": "Goroutines by Service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [{ "expr": "go_goroutines", "legendFormat": "{{instance}}" }]
+    }
+  ]
+}
