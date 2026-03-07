@@ -22,4 +22,11 @@ services:
       - "8080:8080" # ให้หน้าบ้าน (HTML) เรียก API ผ่าน Port นี้
     depends_on:
       rabbitmq:
-        condition: service_healthy # รอให้ RabbitMQ พร้อมใช้งานจริงๆ ก่อนถึงจะเปิด Service นี้
+        condition: service_healthy
+
+  # 3. ระบบยืนยันตัวตน (The new Auth Service)
+  authentication-service:
+    build: ./authentication-service
+    container_name: 100tip_auth
+    ports:
+      - "8081:8081" # Exposing port 8081 specifically for Auth
