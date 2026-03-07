@@ -30,3 +30,30 @@ services:
     container_name: 100tip_auth
     ports:
       - "8081:8081" # Exposing port 8081 specifically for Auth
+
+
+      # --- Service Discovery ---
+  consul:
+    image: hashicorp/consul
+    container_name: 100tip_registry
+    ports:
+      - "8500:8500"
+    command: agent -dev -client=0.0.0.0
+
+  # --- Data Collector ---
+  prometheus:
+    image: prom/prometheus
+    container_name: 100tip_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml 
+
+  # --- Pretty Dashboard ---
+  grafana:
+    image: grafana/grafana
+    container_name: 100tip_grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
