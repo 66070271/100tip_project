@@ -16,12 +16,62 @@
       "targets": [{ "expr": "sum(rate(gin_requests_total[1m]))", "legendFormat": "Req/s" }],
       "options": { "colorMode": "background", "graphMode": "area" }
     },
-    {
-      "title": "Auth Success Rate (%)",
-      "type": "gauge",
+{
+      "title": "🔐 จำนวนการ Login สำเร็จ (Total Logins)",
+      "type": "stat",
       "gridPos": { "h": 6, "w": 8, "x": 8, "y": 1 },
-      "targets": [{ "expr": "sum(rate(gin_requests_total{url=\"/api/auth/login\", code=\"200\"}[1m])) / sum(rate(gin_requests_total{url=\"/api/auth/login\"}[1m])) * 100" }],
-      "fieldConfig": { "defaults": { "min": 0, "max": 100, "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 80 }] } } }
+      "targets": [
+        { 
+          "expr": "sum(gin_requests_total{url=\"/api/auth/login\", code=\"200\"})", 
+          "legendFormat": "Successful Logins" 
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "🛡️ Circuit Breaker (Discussion -> Auth)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 1 },
+      "targets": [
+        { "expr": "auth_breaker_state", "legendFormat": "State" }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "CLOSED (🟢 ปกติ)", "color": "green" },
+                "1": { "text": "HALF-OPEN (🟡 ลองต่อใหม่)", "color": "yellow" },
+                "2": { "text": "OPEN (🔴 ตัดไฟ!)", "color": "red" }
+                
+              }
+            }
+          ]
+        }
+      }
     },
     {
       "title": "Discussion: Post Creation Rate",

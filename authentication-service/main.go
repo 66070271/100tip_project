@@ -23,6 +23,7 @@ type User struct {
 	gorm.Model
 	Username string `gorm:"unique"`
 	Password string
+	Role     string `gorm:"default:'Member'"`
 }
 
 func main() {
@@ -53,7 +54,7 @@ func main() {
 	// 3. Our Two API Endpoints
 	r.POST("/api/auth/register", register) // เปลี่ยนจาก /register
 	r.POST("/api/auth/login", login)       // เปลี่ยนจาก /login
-
+	r.GET("/api/auth/users/:username/role", getUserRole)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "UP", "service": "authentication-service"})
 	})
@@ -150,10 +151,30 @@ func registerWithConsul(serviceName string, port int) {
 		},
 	}
 
-	err = client.Agent().ServiceRegister(registration)
-	if err != nil {
-		log.Printf("⚠️ รายงานตัวกับ Consul ไม่สำเร็จ: %v\n", err)
-	} else {
-		log.Printf("✅ %s รายงานตัวกับ Consul สำเร็จแล้ว!\n", serviceName)
+	maxRetries := 10
+		for i := 1; i <= maxRetries; i++ {
+			err = client.Agent().ServiceRegister(registration)
+			if err == nil {
+				log.Printf("✅ %s รายงานตัวกับ Consul สำเร็จแล้ว!\n", serviceName)
+				return // ถ้าสำเร็จก็จบฟังก์ชันเลย ไม่ต้องทำต่อ
+			}
+			
+			log.Printf("⏳ Consul ยังไม่พร้อม (ลองครั้งที่ %d/%d) รอ 5 วินาที... Error: %v\n", i, maxRetries, err)
+			time.Sleep(5 * time.Second) // รอ 5 วินาทีก่อนเคาะประตูใหม่
+		}
+
+		log.Printf("❌ ยอมแพ้! ไม่สามารถรายงานตัวกับ Consul ได้หลังจากพยายาม %d ครั้ง\n", maxRetries)
 	}
+func getUserRole(c *gin.Context) {
+    username := c.Param("username")
+    var user User
+    
+    // ค้นหา User จากชื่อ
+    if err := db.Where("username = ?", username).First(&user).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+        return
+    }
+    
+    // ส่งยศกลับไปให้
+    c.JSON(http.StatusOK, gin.H{"role": user.Role})
 }

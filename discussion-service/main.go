@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/consul/api"
@@ -14,8 +15,15 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	ginprometheus "github.com/zsais/go-gin-prometheus"
+	"github.com/sony/gobreaker"
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/prometheus/client_golang/prometheus/promauto"
 )
-
+var roleBreaker *gobreaker.CircuitBreaker
+var breakerGauge = promauto.NewGauge(prometheus.GaugeOpts{
+    Name: "auth_breaker_state",
+    Help: "State of the Auth Service Circuit Breaker (0:Closed, 1:Open, 2:HalfOpen)",
+})
 type Post struct {
 	gorm.Model
 	Title   string `json:"title" binding:"required"`
@@ -67,6 +75,22 @@ func main() {
 	registerWithConsul("discussion-service", 8080)
 
 	fmt.Println("🚀 Discussion Service is running on port 8080...")
+	
+	roleBreaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{
+        Name:        "Auth-Role-Breaker",
+        MaxRequests: 3,                 // ตอน Half-Open ให้ลองเช็ก 3 ครั้ง
+        Interval:    10 * time.Second,  // ล้างประวัติทุก 10 วิ
+        Timeout:     40 * time.Second,  // ถ้า Auth พัง ให้ตัดไฟ 15 วิ
+        ReadyToTrip: func(counts gobreaker.Counts) bool {
+            return counts.ConsecutiveFailures >= 3 // พังติดกัน 3 รอบ = ตัดไฟ!
+        },
+        OnStateChange: func(name string, from, to gobreaker.State) {
+            // อัปเดตสถานะส่งไปโชว์ที่ Grafana ทันที
+            breakerGauge.Set(float64(to))
+            log.Printf("🚨 เบรกเกอร์ [%s] เปลี่ยนสถานะ: %s -> %s", name, from, to)
+        },
+    })
+
 	r.Run(":8080")
 }
 
@@ -130,7 +154,11 @@ func getPostByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "ไม่พบกระทู้"})
 		return
 	}
-	c.JSON(http.StatusOK, post)
+	userRole := fetchRoleWithBreaker(post.UserID)
+	c.JSON(http.StatusOK, gin.H{
+        "post": post,
+        "author_role": userRole, 
+    })
 }
 
 func updatePost(c *gin.Context) {
@@ -252,4 +280,32 @@ func registerWithConsul(serviceName string, port int) {
     } else {
         log.Printf("✅ %s รายงานตัวกับ Consul สำเร็จแล้ว!\n", serviceName)
     }
+}
+func fetchRoleWithBreaker(username string) string {
+    result, err := roleBreaker.Execute(func() (interface{}, error) {
+        // ใช้ชื่อ authentication-service ตามที่จดใน Consul พอร์ต 8082
+        resp, err := http.Get("http://authentication-service:8082/api/auth/users/" + username + "/role")
+        if err != nil || resp.StatusCode != 200 {
+            return nil, fmt.Errorf("Auth Service Error")
+        }
+        defer resp.Body.Close()
+        
+        // แกะ JSON เอาแค่คำว่า role
+        var data struct { Role string `json:"role"` }
+        if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+            return nil, err
+        }
+        return data.Role, nil
+    })
+
+  if err != nil {
+        // เช็กว่า Error นี้เกิดจากตัวเบรกเกอร์มันตัดไฟเองใช่ไหม?
+        if err == gobreaker.ErrOpenState {
+            log.Println("🚨 [Fast-Fail] เบรกเกอร์ทำงาน! เตะ Request ทิ้งทันทีไม่ต้องรอ!")
+        } else {
+            log.Println("⚠️ [Timeout] ติดต่อตู้ Auth ไม่ได้ (รอจนท้อแล้ว)")
+        }
+        return "Member (Offline)" 
+    }
+    return result.(string)
 }
