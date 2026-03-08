@@ -80,12 +80,6 @@
       "targets": [{ "expr": "rate(gin_requests_total{instance=~\"discussion-service.*\", method=\"POST\", url=\"/api/posts\"}[1m])", "legendFormat": "New Posts/min" }]
     },
     {
-      "title": "Moderation: Queue Health (Pending Status)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
-      "targets": [{ "expr": "sum(gin_requests_total{instance=~\"moderation-service.*\", code=\"200\"})", "legendFormat": "Posts Processed" }]
-    },
-    {
       "title": "💻 System Resources (Go Runtime)",
       "type": "row",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
