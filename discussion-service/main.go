@@ -29,7 +29,7 @@ type Post struct {
 	Title   string `json:"title" binding:"required"`
 	Content string `json:"content" binding:"required"`
 	UserID  string `json:"user_id"`
-	Status  string `json:"status"` // "pending", "approved", "rejected"
+	Status  string `json:"status"` 
 }
 
 var db *gorm.DB
@@ -43,7 +43,7 @@ func main() {
 	db.AutoMigrate(&Post{})
 	fmt.Println("✅ Database connected and migrated!")
 
-	// 📍 สั่งให้ Discussion ไปตั้งใจฟังประกาศจาก Moderation (Background)
+	
 	go consumeStatusUpdates("discussion_update_queue")
 
 	r := gin.Default()
@@ -78,14 +78,14 @@ func main() {
 	
 	roleBreaker = gobreaker.NewCircuitBreaker(gobreaker.Settings{
         Name:        "Auth-Role-Breaker",
-        MaxRequests: 3,                 // ตอน Half-Open ให้ลองเช็ก 3 ครั้ง
-        Interval:    10 * time.Second,  // ล้างประวัติทุก 10 วิ
-        Timeout:     40 * time.Second,  // ถ้า Auth พัง ให้ตัดไฟ 15 วิ
+        MaxRequests: 3,                
+        Interval:    10 * time.Second,  
+        Timeout:     40 * time.Second,  
         ReadyToTrip: func(counts gobreaker.Counts) bool {
-            return counts.ConsecutiveFailures >= 3 // พังติดกัน 3 รอบ = ตัดไฟ!
+            return counts.ConsecutiveFailures >= 3 
         },
         OnStateChange: func(name string, from, to gobreaker.State) {
-            // อัปเดตสถานะส่งไปโชว์ที่ Grafana ทันที
+            
             breakerGauge.Set(float64(to))
             log.Printf("🚨 เบรกเกอร์ [%s] เปลี่ยนสถานะ: %s -> %s", name, from, to)
         },
@@ -95,17 +95,17 @@ func main() {
 }
 
 func createPost(c *gin.Context) {
-	// 📍 1. ตรวจสอบบัตรผ่าน (JWT) จาก Header
+	
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "ต้องล็อกอินก่อนสร้างกระทู้"})
 		return
 	}
 
-	// รูปแบบคือ "Bearer <token>" เราต้องตัดคำว่า Bearer ออก
+	
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	
-	// 📍 2. ถอดรหัสบัตรผ่าน (ต้องใช้ Secret Key เดียวกับ Auth Service)
+	
 	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return []byte("my_super_secret_key_100tip"), nil 
 	})
@@ -115,7 +115,7 @@ func createPost(c *gin.Context) {
 		return
 	}
 
-	// 📍 3. ดึงชื่อ Username ออกมาจากบัตรผ่าน
+	
 	claims, _ := token.Claims.(jwt.MapClaims)
 	username := claims["username"].(string)
 
@@ -126,7 +126,7 @@ func createPost(c *gin.Context) {
 	}
 	
 	newPost.Status = "pending"
-	newPost.UserID = username // 👈 เปลี่ยนจาก "user_123" เป็นชื่อที่ดึงมาได้จาก Token จริงๆ!
+	newPost.UserID = username 
 
 	if err := db.Create(&newPost).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ไม่สามารถบันทึกข้อมูลได้"})
@@ -185,9 +185,7 @@ func deletePost(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "ลบกระทู้สำเร็จ"})
 }
 
-// ==========================================
-// RabbitMQ Functions
-// ==========================================
+
 func publishToRabbitMQ(queueName string, post Post) {
 	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
 	if err != nil {
@@ -216,18 +214,21 @@ func publishToRabbitMQ(queueName string, post Post) {
 }
 
 func consumeStatusUpdates(queueName string) {
-	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
-	if err != nil {
-		log.Println("⚠️ Consumer Failed to connect to RabbitMQ")
-		return
+	var conn *amqp.Connection
+	var err error
+
+	
+	for {
+		conn, err = amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
+		if err == nil {
+			break 
+		}
+		log.Printf("⚠️ RabbitMQ ยังไม่พร้อม รอ 2 วินาที... (%v)", err)
+		time.Sleep(2 * time.Second)
 	}
 	defer conn.Close()
 
 	ch, err := conn.Channel()
-	if err != nil {
-		return
-	}
-	defer ch.Close()
 
 	q, _ := ch.QueueDeclare(queueName, true, false, false, false, nil)
 	msgs, _ := ch.Consume(q.Name, "", true, false, false, false, nil)
@@ -254,7 +255,7 @@ func consumeStatusUpdates(queueName string) {
 }
 func registerWithConsul(serviceName string, port int) {
     config := api.DefaultConfig()
-    config.Address = "consul:8500" // ชี้ไปที่ Container ของ Consul ใน Docker
+    config.Address = "consul:8500" 
 
     client, err := api.NewClient(config)
     if err != nil {
@@ -263,13 +264,13 @@ func registerWithConsul(serviceName string, port int) {
     }
 
     registration := &api.AgentServiceRegistration{
-        ID:      serviceName + "-1", // ตั้ง ID ให้ไม่ซ้ำกันเผื่อรันหลายตู้
+        ID:      serviceName + "-1", 
         Name:    serviceName,
         Port:    port,
-        Address: serviceName, // ใช้ชื่อ Container Name เป็น Address ให้ Docker หาเจอ
+        Address: serviceName, 
         Check: &api.AgentServiceCheck{
             HTTP:     fmt.Sprintf("http://%s:%d/health", serviceName, port),
-            Interval: "10s", // ตรวจสุขภาพทุกๆ 10 วินาที
+            Interval: "10s", 
             Timeout:  "5s",
         },
     }
@@ -283,14 +284,14 @@ func registerWithConsul(serviceName string, port int) {
 }
 func fetchRoleWithBreaker(username string) string {
     result, err := roleBreaker.Execute(func() (interface{}, error) {
-        // ใช้ชื่อ authentication-service ตามที่จดใน Consul พอร์ต 8082
+        
         resp, err := http.Get("http://authentication-service:8082/api/auth/users/" + username + "/role")
         if err != nil || resp.StatusCode != 200 {
             return nil, fmt.Errorf("Auth Service Error")
         }
         defer resp.Body.Close()
         
-        // แกะ JSON เอาแค่คำว่า role
+        
         var data struct { Role string `json:"role"` }
         if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
             return nil, err
@@ -299,7 +300,7 @@ func fetchRoleWithBreaker(username string) string {
     })
 
   if err != nil {
-        // เช็กว่า Error นี้เกิดจากตัวเบรกเกอร์มันตัดไฟเองใช่ไหม?
+        
         if err == gobreaker.ErrOpenState {
             log.Println("🚨 [Fast-Fail] เบรกเกอร์ทำงาน! เตะ Request ทิ้งทันทีไม่ต้องรอ!")
         } else {

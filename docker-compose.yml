@@ -1,9 +1,6 @@
 version: '3.8'
 
 services:
-  # ==========================================
-  # 1. INFRASTRUCTURE & MONITORING
-  # ==========================================
   rabbitmq:
     image: rabbitmq:3-management
     container_name: 100tip_rabbitmq
@@ -38,13 +35,10 @@ services:
     container_name: 100tip_grafana
     ports:
       - "3000:3000"
-    volumes: # 📍 เพิ่ม 2 บรรทัดนี้เข้าไปครับ
+    volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/dashboards:/var/lib/grafana/dashboards
  
-  # ==========================================
-  # 2. API GATEWAY & FRONTEND
-  # ==========================================
   api-gateway:
     build: ./api-gateway
     container_name: 100tip_gateway
@@ -57,9 +51,7 @@ services:
       - moderation-service
       - authentication-service
 
-  # ==========================================
-  # 3. MICROSERVICES (หลังบ้าน)
-  # ==========================================
+  
   discussion-service:
     build: ./discussion-service
     container_name: 100tip_discussion

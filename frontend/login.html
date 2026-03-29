@@ -44,7 +44,7 @@
     </main>
 
     <script>
-        const AUTH_API = "http://localhost:8000/api/auth"; // Note: Port 8081 for the Auth Service
+        const AUTH_API = "http://localhost:8000/api/auth"; 
 
         async function handleAuth(action) {
             const username = document.getElementById('username').value;
@@ -69,7 +69,7 @@
                     if (action === 'register') {
                         showMessage("Registered successfully! Now click Login.", "text-green-600");
                     } else {
-                        // THIS IS THE IMPORTANT PART: Save the wristband (JWT token) to the browser
+                        
                         localStorage.setItem('100tip_token', data.token);
                         showMessage("Logged in! Redirecting...", "text-green-600");
                         setTimeout(() => window.location.href = 'index.html', 1000);

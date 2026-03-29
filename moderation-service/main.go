@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -34,7 +35,7 @@ func main() {
 	db.AutoMigrate(&ReviewTask{})
 	fmt.Println("✅ Moderation Database connected and migrated!")
 
-	// สั่งให้ Worker ไปรอรับงานจาก RabbitMQ (Background)
+	
 	go consumeFromQueue("moderation_queue")
 
 	r := gin.Default()
@@ -55,7 +56,7 @@ func main() {
 	r.GET("/health", func(c *gin.Context) {
         c.JSON(http.StatusOK, gin.H{"status": "UP", "service": "moderation-service"})
     })
-    // 📍 2. รายงานตัวชื่อ moderation-service พอร์ต 8081
+    
     registerWithConsul("moderation-service", 8081)
 
 	fmt.Println("🛡️ Moderation Service is running on port 8081...")
@@ -88,7 +89,7 @@ func updateTaskStatus(c *gin.Context) {
 	task.Status = input.Status
 	db.Save(&task)
 
-	// 📍 ตะโกนบอก RabbitMQ เข้าคิวชื่อ "discussion_update_queue"
+	
 	publishStatusUpdate("discussion_update_queue", task.PostID, task.Status)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -97,23 +98,23 @@ func updateTaskStatus(c *gin.Context) {
 	})
 }
 
-// ==========================================
-// RabbitMQ Functions
-// ==========================================
+
 func consumeFromQueue(queueName string) {
-	conn, err := amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
-	if err != nil {
-		log.Printf("⚠️ Failed to connect to RabbitMQ: %v", err)
-		return
+var conn *amqp.Connection
+	var err error
+
+	
+	for {
+		conn, err = amqp.Dial("amqp://guest:guest@rabbitmq:5672/")
+		if err == nil {
+			break 
+		}
+		log.Printf("⚠️ RabbitMQ ยังไม่พร้อม รอ 2 วินาที... (%v)", err)
+		time.Sleep(2 * time.Second)
 	}
 	defer conn.Close()
 
 	ch, err := conn.Channel()
-	if err != nil {
-		log.Printf("⚠️ Failed to open channel: %v", err)
-		return
-	}
-	defer ch.Close()
 
 	q, _ := ch.QueueDeclare(queueName, true, false, false, false, nil)
 	msgs, err := ch.Consume(q.Name, "", true, false, false, false, nil)
@@ -141,7 +142,16 @@ func consumeFromQueue(queueName string) {
 			Content: postPayload.Content,
 			Status:  "pending",
 		}
-		db.Create(&newTask)
+		
+		
+		if err := db.Create(&newTask).Error; err != nil {
+			log.Printf("❌ [Saga Compensating] DB Error! ไม่สามารถเซฟตั๋วงาน ID: %d ได้", postPayload.ID)
+			
+			
+			publishStatusUpdate("discussion_update_queue", postPayload.ID, "error")
+			continue 
+		}
+
 		log.Printf("📥 Received new Post (ID: %d) and saved as Review Task!", postPayload.ID)
 	}
 }
@@ -174,12 +184,10 @@ func publishStatusUpdate(queueName string, postID uint, status string) {
 	})
 	log.Printf("📢 Published status update for Post %d to %s", postID, queueName)
 }
-// ==========================================
-// Consul Registration Function
-// ==========================================
+
 func registerWithConsul(serviceName string, port int) {
     config := api.DefaultConfig()
-    config.Address = "consul:8500" // ชี้ไปที่ Container ของ Consul
+    config.Address = "consul:8500" 
 
     client, err := api.NewClient(config)
     if err != nil {
@@ -191,7 +199,7 @@ func registerWithConsul(serviceName string, port int) {
         ID:      serviceName + "-1",
         Name:    serviceName,
         Port:    port,
-        Address: serviceName, // ให้ Docker หาเจอผ่านชื่อ Container
+        Address: serviceName, 
         Check: &api.AgentServiceCheck{
             HTTP:     fmt.Sprintf("http://%s:%d/health", serviceName, port),
             Interval: "10s",

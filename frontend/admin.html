@@ -45,7 +45,7 @@
                 const res = await fetch(API + "?t=" + new Date().getTime());
                 const posts = await res.json();
                 
-                // หาเฉพาะอันที่ pending
+                
                 const pendingPosts = posts.filter(p => p.status === 'pending').sort((a, b) => b.ID - a.ID);
                 const container = document.getElementById('admin-container');
 

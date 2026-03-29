@@ -1,8 +1,8 @@
 package main
 
 import (
-	"fmt" // 👈 เพิ่มบรรทัดนี้
-	"log" // 👈 เพิ่มบรรทัดนี้
+	"fmt" 
+	"log" 
 	"net/http"
 	"time"
 
@@ -15,9 +15,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// 1. Setup the Database and Secret Key
+
 var db *gorm.DB
-var jwtSecret = []byte("my_super_secret_key_100tip") // In a real app, hide this!
+var jwtSecret = []byte("my_super_secret_key_100tip") 
 
 type User struct {
 	gorm.Model
@@ -27,19 +27,19 @@ type User struct {
 }
 
 func main() {
-	// Connect to SQLite (This will create an auth.db file automatically)
+	
 	var err error
 	db, err = gorm.Open(sqlite.Open("auth.db"), &gorm.Config{})
 	if err != nil {
 		panic("failed to connect database")
 	}
-	db.AutoMigrate(&User{}) // Creates the user table
+	db.AutoMigrate(&User{})
 
-	// 2. Setup the Web Server
+	
 	r := gin.Default()
 	p := ginprometheus.NewPrometheus("gin")
 	p.Use(r)
-	// CORS Middleware to let your HTML files talk to this API
+	
 	r.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
@@ -51,24 +51,24 @@ func main() {
 		c.Next()
 	})
 
-	// 3. Our Two API Endpoints
-	r.POST("/api/auth/register", register) // เปลี่ยนจาก /register
-	r.POST("/api/auth/login", login)       // เปลี่ยนจาก /login
+	
+	r.POST("/api/auth/register", register) 
+	r.POST("/api/auth/login", login)       
 	r.GET("/api/auth/users/:username/role", getUserRole)
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "UP", "service": "authentication-service"})
 	})
 
-	// 📍 2. รายงานตัวชื่อ authentication-service พอร์ต 8082
+	
 	registerWithConsul("authentication-service", 8082)
 
-	// Run on port 8081 (Assuming Discussion service runs on 8080)
+	
 	r.Run(":8082")
 }
 
-// --- Handler Functions ---
 
-// Register: Takes username/password, hashes password, saves to DB
+
+
 func register(c *gin.Context) {
 	var input struct {
 		Username string `json:"username"`
@@ -91,7 +91,7 @@ func register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully!"})
 }
 
-// Login: Checks credentials, gives out a JWT wristband
+
 func login(c *gin.Context) {
 	var input struct {
 		Username string `json:"username"`
@@ -114,11 +114,11 @@ func login(c *gin.Context) {
 		return
 	}
 
-	// Create the JWT token (The Bouncer's Wristband)
+	
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id":  user.ID,
 		"username": user.Username,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(), // Expires in 24 hours
+		"exp":      time.Now().Add(time.Hour * 24).Unix(), 
 	})
 
 	tokenString, _ := token.SignedString(jwtSecret)
@@ -126,12 +126,10 @@ func login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
 }
 
-// ==========================================
-// Consul Registration Function
-// ==========================================
+
 func registerWithConsul(serviceName string, port int) {
 	config := api.DefaultConfig()
-	config.Address = "consul:8500" // ชี้ไปที่ Container ของ Consul
+	config.Address = "consul:8500" 
 
 	client, err := api.NewClient(config)
 	if err != nil {
@@ -143,7 +141,7 @@ func registerWithConsul(serviceName string, port int) {
 		ID:      serviceName + "-1",
 		Name:    serviceName,
 		Port:    port,
-		Address: serviceName, // ให้ Docker หาเจอผ่านชื่อ Container
+		Address: serviceName, 
 		Check: &api.AgentServiceCheck{
 			HTTP:     fmt.Sprintf("http://%s:%d/health", serviceName, port),
 			Interval: "10s",
@@ -156,11 +154,11 @@ func registerWithConsul(serviceName string, port int) {
 			err = client.Agent().ServiceRegister(registration)
 			if err == nil {
 				log.Printf("✅ %s รายงานตัวกับ Consul สำเร็จแล้ว!\n", serviceName)
-				return // ถ้าสำเร็จก็จบฟังก์ชันเลย ไม่ต้องทำต่อ
+				return 
 			}
 			
 			log.Printf("⏳ Consul ยังไม่พร้อม (ลองครั้งที่ %d/%d) รอ 5 วินาที... Error: %v\n", i, maxRetries, err)
-			time.Sleep(5 * time.Second) // รอ 5 วินาทีก่อนเคาะประตูใหม่
+			time.Sleep(5 * time.Second) 
 		}
 
 		log.Printf("❌ ยอมแพ้! ไม่สามารถรายงานตัวกับ Consul ได้หลังจากพยายาม %d ครั้ง\n", maxRetries)
@@ -169,12 +167,12 @@ func getUserRole(c *gin.Context) {
     username := c.Param("username")
     var user User
     
-    // ค้นหา User จากชื่อ
+    
     if err := db.Where("username = ?", username).First(&user).Error; err != nil {
         c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
         return
     }
     
-    // ส่งยศกลับไปให้
+    
     c.JSON(http.StatusOK, gin.H{"role": user.Role})
 }

@@ -29,12 +29,12 @@
     <script>
         const API = "http://localhost:8000/api/posts";
 
-        // 1. Check if they are logged in right when the page loads
+        
         window.onload = () => {
             const token = localStorage.getItem('100tip_token');
             if (!token) {
                 alert("Hold up! You need to log in to post.");
-                window.location.href = "login.html"; // Send them to the bouncer
+                window.location.href = "login.html"; 
             }
         };
 
@@ -51,7 +51,7 @@
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}` // 2. Attach the wristband to the request
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({ title, content })
                 });

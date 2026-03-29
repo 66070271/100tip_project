@@ -6,4 +6,4 @@ providers:
     disableDeletion: false
     updateIntervalSeconds: 10
     options:
-      path: /var/lib/grafana/dashboards # โฟลเดอร์ในตู้ Docker ที่เราจะเอาไฟล์ json ไปวาง
+      path: /var/lib/grafana/dashboards
